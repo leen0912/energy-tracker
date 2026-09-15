@@ -1,0 +1,14 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+.local/
+*.log
+.env
+.env.*
+!.env.example
+rendered_liangjie/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
