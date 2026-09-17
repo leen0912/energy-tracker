@@ -1,0 +1,129 @@
+<view class="app {{reducedMotion ? 'reduced' : ''}}">
+  <view wx:if="{{stateError}}" class="error-strip" bindtap="openSettings">{{stateError}}</view>
+  <view class="masthead {{view === 'home' ? 'cover-head' : ''}}">
+    <view><text class="brand">日迹</text><text class="edition">{{view === 'home' ? date : view === 'history' ? '日子，在此留下形状。' : '生活的回响'}}</text></view>
+    <button class="icon-button" bindtap="openSettings" aria-label="设置"><image src="/assets/settings.png" /></button>
+  </view>
+
+  <view wx:if="{{view === 'home'}}" class="home">
+    <view class="home-hero {{motion}}" style="height:{{sceneSize}}px;">
+      <image class="home-scene {{sceneBreathing ? 'scene-breathing' : ''}}" src="/assets/{{sceneAsset}}" mode="aspectFit" aria-label="窗外的城市、窗台和今天的花园" />
+      <view wx:if="{{incomingAsset}}" class="scene-reveal {{sceneRevealing ? 'revealing' : ''}}">
+        <image class="incoming-scene" style="height:{{sceneSize}}px;" src="/assets/{{incomingAsset}}" mode="aspectFit" data-asset="{{incomingAsset}}" bindload="sceneLoaded" binderror="sceneFailed" />
+      </view>
+      <view class="energy-reading">
+        <text class="eyebrow">{{batteryLabel}}</text>
+        <text class="energy-number {{numberSize}}">{{displayNumber}}</text>
+        <text class="estimate">{{value === null ? '从你的感受开始' : overdraft ? '透支 · 根据记录估算' : '根据记录估算'}}</text>
+        <button class="feeling-link" bindtap="openCalibration">{{value === null ? '现在感受怎么样？' : '此刻的感受'}} <text>↗</text></button>
+        <text wx:if="{{stale}}" class="last-time">最近记录 {{lastTime}}</text>
+        <text wx:if="{{!stale}}" class="mood-copy">{{moodCopy}}</text>
+      </view>
+    </view>
+    <view class="recording">
+      <view class="segments">
+        <button class="{{mode === 1 ? 'active' : ''}}" data-value="1" bindtap="changeMode"><text>补充</text></button>
+        <button class="{{mode === -1 ? 'active' : ''}}" data-value="-1" bindtap="changeMode"><text>消耗</text></button>
+      </view>
+      <view class="presets">
+        <button wx:for="{{presets}}" wx:key="id" class="preset {{selectedPreset === item.id ? 'chosen' : ''}}" data-id="{{item.id}}" bindtap="selectPreset"><image src="/assets/{{item.icon}}.png" /><text>{{item.short}}</text><view class="selected-dot" wx:if="{{selectedPreset === item.id}}"></view></button>
+      </view>
+      <view class="record-tools">
+        <button class="text-tool" bindtap="customRecord"><image src="/assets/pencil.png" />自己写一句</button>
+        <button wx:if="{{selectedPreset}}" class="text-tool" bindtap="selectedDetails">详情 <text>↗</text></button>
+        <button class="text-tool" bindtap="openDrinks"><image src="/assets/coffee.png" />饮品·补剂</button>
+      </view>
+      <button class="primary record-submit" disabled="{{!selectedPreset}}" bindtap="recordSelected">记下此刻</button>
+    </view>
+    <view class="latest-row">
+      <button class="latest-copy" bindtap="openToday"><text class="small-label">{{feedback || '今天留下的片刻'}}</text><text class="recent-name">{{recentText}}</text></button>
+      <button wx:if="{{lastAdded}}" class="icon-button" bindtap="undoSaved" aria-label="撤销刚才的记录"><image src="/assets/undo.png" /></button>
+    </view>
+    <view wx:if="{{timer}}" class="timer-line"><image src="/assets/clock.png" /><text>{{timerText}}</text><button bindtap="stopTimer">结束并记录</button></view>
+  </view>
+
+  <view wx:elif="{{view === 'history'}}" class="history">
+    <view class="month-bar"><button class="icon-button" data-delta="-1" bindtap="changeMonth" aria-label="上个月"><image src="/assets/chevron-left.png" /></button><text>{{monthLabel}}</text><button class="icon-button" data-delta="1" bindtap="changeMonth" aria-label="下个月"><image src="/assets/chevron-right.png" /></button></view>
+    <view class="weekdays"><text wx:for="{{weekdays}}" wx:key="*this">{{item}}</text></view>
+    <view class="calendar">
+      <button wx:for="{{cells}}" wx:key="key" class="day {{item.outside ? 'outside' : ''}} {{item.future ? 'future' : ''}} {{item.selected ? 'selected' : ''}}" data-date="{{item.key}}" bindtap="selectDay" disabled="{{item.outside || item.future}}" aria-label="{{item.key}}">
+        <text class="day-number {{item.today ? 'today' : ''}}">{{item.day}}</text>
+        <image wx:if="{{item.marker}}" class="day-marker" src="/assets/{{item.marker}}.png" mode="aspectFit" />
+      </button>
+    </view>
+    <button class="day-summary" bindtap="openDay"><view><text class="small-label">{{selectedDate}}</text><text>{{historyEvents.length ? '留下了 ' + historyEvents.length + ' 个片刻' : '这一天，尚未留下记录'}}</text></view><image src="/assets/chevron-right.png" /></button>
+    <view class="calendar-garden">
+      <text class="calendar-caption">这一页，<text class="newline">也是生活。</text></text>
+      <view class="calendar-art">
+        <image class="calendar-scene" src="/assets/{{historyGarden.asset}}" mode="aspectFit" />
+      </view>
+    </view>
+  </view>
+
+  <view wx:else class="share">
+    <view class="share-toolbar"><picker mode="date" value="{{selectedDate}}" end="{{today}}" bindchange="changeShareDate"><view class="date-choice">{{selectedDate}} <text>⌄</text></view></picker><button class="text-tool" bindtap="shareToday">今天</button><view class="format-options"><button class="{{posterFormat === 'portrait' ? 'selected-format' : ''}}" data-value="portrait" bindtap="changeFormat" aria-label="竖版"><view class="ratio-icon portrait-icon"></view></button><button class="{{posterFormat === 'square' ? 'selected-format' : ''}}" data-value="square" bindtap="changeFormat" aria-label="方版"><view class="ratio-icon square-icon"></view></button></view></view>
+    <view class="poster-wrap {{posterFormat}}">
+      <image wx:if="{{posterPath}}" class="poster-image" src="{{posterPath}}" mode="widthFix" bindtap="previewPoster" />
+      <view wx:else class="poster-status"><text>{{busy ? '正在整理这一页…' : '这页暂时没有生成成功'}}</text><button wx:if="{{posterError}}" bindtap="makePoster">重新生成</button></view>
+    </view>
+    <view wx:if="{{posterPages > 1}}" class="poster-pagination"><button class="icon-button" data-delta="-1" bindtap="changePosterPage" disabled="{{posterPage === 0}}" aria-label="上一页"><image src="/assets/chevron-left.png" /></button><text>第 {{posterPage + 1}} / {{posterPages}} 页</text><button class="icon-button" data-delta="1" bindtap="changePosterPage" disabled="{{posterPage + 1 === posterPages}}" aria-label="下一页"><image src="/assets/chevron-right.png" /></button></view>
+    <view class="privacy"><view><text>展示记录名称</text><text class="small-label">心情备注只留给自己。</text></view><switch checked="{{showNames}}" color="#202526" bindchange="privacyChange" /></view>
+    <button class="primary" disabled="{{busy || !posterPath}}" bindtap="savePoster"><image src="/assets/download-white.png" />{{posterPages > 1 ? '保存这一页花园' : '保存这座花园'}}</button>
+    <button class="preview-button" disabled="{{busy || !posterPath}}" bindtap="previewPoster"><image src="/assets/expand.png" />打开大图</button>
+  </view>
+
+  <view class="bottom-nav">
+    <button class="{{view === 'home' ? 'active' : ''}}" data-view="home" bindtap="switchView"><image src="/assets/battery.png" /><text>电量</text></button>
+    <button class="{{view === 'history' ? 'active' : ''}}" data-view="history" bindtap="switchView"><image src="/assets/calendar.png" /><text>日历</text></button>
+    <button class="{{view === 'share' ? 'active' : ''}}" data-view="share" bindtap="switchView"><image src="/assets/sprout.png" /><text>回响</text></button>
+  </view>
+  <canvas canvas-id="poster" class="canvas" style="width:600px;height:{{posterHeight}}px;"></canvas>
+
+  <view wx:if="{{sheet}}" class="overlay" style="height:{{overlayHeight}}px;" bindtap="closeSheet">
+    <view class="sheet-mask" catchtouchmove="noop"></view>
+    <view class="sheet" style="height:{{sheetHeight}}px;padding-bottom:{{sheetBottom}}px;" catchtap="noop">
+      <view class="sheet-top"><text class="sheet-title">{{sheet === 'calibration' ? '现在感受怎么样？' : sheet === 'editor' ? editingId ? '这一段经历' : '留下一段经历' : sheet === 'day' ? selectedDate : sheet === 'settings' ? '留给自己' : sheet === 'drinks' ? '喝了 / 补了点什么' : '恢复备份'}}</text><button class="icon-button" bindtap="closeSheet" aria-label="关闭"><image src="/assets/x.png" /></button></view>
+      <scroll-view scroll-y="true" class="sheet-scroll" style="height:{{sheetScrollHeight}}px;" scroll-into-view="{{focusedField}}" enhanced="true" show-scrollbar="false">
+        <view id="sheet-start"></view>
+        <view wx:if="{{sheet === 'calibration'}}">
+          <text class="sheet-note">不用准确。以你此刻的感受为准。</text>
+          <view class="feeling-options"><button wx:for="{{feelings}}" wx:key="id" data-id="{{item.id}}" bindtap="chooseFeeling"><text>{{item.label}}</text><image src="/assets/chevron-right.png" /></button></view>
+          <text class="fine-print">这里的电量只是个人记录的估算，不是身体测量。</text>
+        </view>
+        <view wx:elif="{{sheet === 'editor'}}" class="editor">
+          <text class="field-label">这段经历</text>
+          <input id="field-label" class="title-input" value="{{editor.label}}" maxlength="80" placeholder="刚刚，发生了什么？" placeholder-style="color:#77817e;" adjust-position="{{false}}" cursor-spacing="20" bindfocus="inputFocus" bindkeyboardheightchange="keyboardChange" data-field="label" bindinput="inputField" />
+          <view wx:if="{{editor.preset === 'meal'}}" class="form-section">
+            <view class="choice-row"><button wx:for="{{mealStatuses}}" wx:key="id" class="{{editor.meta.mealStatus === item.id ? 'chosen' : ''}}" data-field="mealStatus" data-id="{{item.id}}" bindtap="setMeta">{{item.label}}</button></view>
+            <block wx:if="{{editor.meta.mealStatus === 'eaten' || !editor.meta.mealStatus}}"><text class="field-label">吃饱了吗 · 可不选</text><view class="choice-row"><button wx:for="{{fullnesses}}" wx:key="id" class="{{(editor.meta.fullness || '') === item.id ? 'chosen' : ''}}" data-field="fullness" data-id="{{item.id}}" bindtap="setMeta">{{item.label}}</button></view><text class="field-label">这顿的感觉 · 可不选</text><view class="choice-row"><button wx:for="{{satisfactions}}" wx:key="id" class="{{(editor.meta.satisfaction || '') === item.id ? 'chosen' : ''}}" data-field="satisfaction" data-id="{{item.id}}" bindtap="setMeta">{{item.label}}</button></view></block>
+          </view>
+          <view wx:if="{{editor.preset === 'coffee' || editor.preset === 'tea' || editor.preset === 'supplement'}}" class="form-section"><text class="field-label">喝了 / 吃了多少 · 选填</text><input id="field-meta-amount" value="{{editor.meta.amount}}" placeholder="例如半杯，或留空" maxlength="40" adjust-position="{{false}}" bindfocus="inputFocus" bindkeyboardheightchange="keyboardChange" data-field="meta.amount" bindinput="inputField" /></view>
+          <view class="form-section"><text class="field-label">给我的感觉</text><view class="choice-row"><button wx:for="{{directions}}" wx:key="value" disabled="{{editor.preset === 'meal' && editor.meta.mealStatus !== 'eaten' && editor.meta.mealStatus && item.value !== 0}}" class="{{editor.direction === item.value ? 'chosen' : ''}}" data-value="{{item.value}}" bindtap="setDirection">{{item.label}}</button></view></view>
+          <view wx:if="{{editor.direction !== 0}}" class="form-section"><text class="field-label">影响程度 · 可不选</text><view class="choice-row"><button wx:for="{{levels}}" wx:key="id" class="{{editor.impact === item.id ? 'chosen' : ''}}" data-id="{{item.id}}" bindtap="setLevel">{{item.label}}</button></view></view>
+          <view wx:if="{{!timerFinishing}}" class="form-section"><text class="field-label">{{editor.preset === 'sleep' ? '醒来的时间' : editor.preset === 'meal' && editor.meta.mealStatus === 'eaten' ? '吃饭的时间' : '发生时间'}}</text><view class="date-fields"><picker mode="date" value="{{editor.date}}" end="{{today}}" data-field="date" bindchange="inputField"><view>{{editor.date}}</view></picker><picker mode="time" value="{{editor.time}}" data-field="time" bindchange="inputField"><view>{{editor.time}}</view></picker></view></view>
+          <view wx:if="{{!timerFinishing}}" class="form-section"><text class="field-label">{{editor.preset === 'sleep' ? '睡了多久（分钟）' : '持续多久（分钟）'}} · 选填</text><input id="field-minutesText" type="digit" value="{{editor.minutesText}}" placeholder="不确定就留空" adjust-position="{{false}}" bindfocus="inputFocus" bindkeyboardheightchange="keyboardChange" data-field="minutesText" bindinput="inputField" /></view>
+          <view class="form-section"><text class="field-label">只给自己的一句话 · 选填</text><textarea id="field-note" value="{{editor.note}}" maxlength="500" placeholder="不放进分享图。" fixed="{{true}}" adjust-position="{{false}}" bindfocus="inputFocus" bindkeyboardheightchange="keyboardChange" data-field="note" bindinput="inputField" /></view>
+          <button class="primary" bindtap="saveEditor">{{editingId ? '保存修改' : timerFinishing ? '结束并留下这一段' : '记下此刻'}}</button>
+          <button wx:if="{{editingId}}" class="danger" bindtap="deleteEntry">删除这段记录</button>
+          <button wx:if="{{timerFinishing}}" class="danger" bindtap="discardTimer">结束，不留记录</button>
+        </view>
+        <view wx:elif="{{sheet === 'drinks'}}" class="feeling-options"><button wx:for="{{drinks}}" wx:key="id" data-id="{{item.id}}" bindtap="drinkRecord"><text>{{item.short}}</text><image src="/assets/{{item.icon}}.png" /></button></view>
+        <view wx:elif="{{sheet === 'day'}}" class="day-detail">
+          <text wx:if="{{!historyEvents.length}}" class="sheet-note">没有记录，不代表这一天没有发生。</text>
+          <button wx:for="{{historyEvents}}" wx:key="id" class="entry" data-id="{{item.id}}" bindtap="editEntry"><image src="/assets/{{item.icon}}.png" /><view><text class="entry-label">{{item.label}}</text><text class="small-label">{{item.time}} · {{item.directionText}}{{item.duration ? ' · ' + item.duration : ''}}</text><text wx:if="{{item.note}}" class="private-note">{{item.note}}</text></view><image class="entry-arrow" src="/assets/chevron-right.png" /></button>
+          <button class="primary" bindtap="shareDay">看看这一天的回响</button>
+        </view>
+        <view wx:elif="{{sheet === 'settings'}}" class="settings">
+          <view class="setting-row"><text>减少动效</text><switch checked="{{reducedMotion}}" color="#202526" bindchange="changeMotion" /></view>
+          <button class="setting-button" bindtap="openCalibration">现在感受怎么样 <image src="/assets/chevron-right.png" /></button>
+          <button class="setting-button" bindtap="{{timer ? 'stopTimer' : 'startTimer'}}">{{timer ? '结束这段计时' : '开始一段计时'}} <image src="/assets/clock.png" /></button>
+          <button class="setting-button" bindtap="exportBackup">复制完整备份 <image src="/assets/chevron-right.png" /></button>
+          <button class="setting-button" bindtap="restoreBackup">从备份恢复 <image src="/assets/chevron-right.png" /></button>
+          <text class="fine-print">记录保存在这台设备上，不会自动同步。清理小程序数据或更换设备前，请先备份。</text>
+          <text class="fine-print">相册仅在你保存花园时写入图片，不读取照片。剪贴板仅在你导出备份时写入，不读取内容。吃饭、饮品和感受均由你自愿记录，不读取健康数据。</text>
+        </view>
+        <view wx:else><text class="sheet-note">粘贴自己的完整备份，恢复会替换当前记录。</text><textarea id="field-restore" class="restore-input" value="{{restoreText}}" maxlength="2097152" fixed="{{true}}" adjust-position="{{false}}" bindfocus="inputFocus" bindkeyboardheightchange="keyboardChange" bindinput="restoreInput" placeholder="在这里手动粘贴备份内容" /><button class="primary" bindtap="confirmRestore">检查并恢复</button></view>
+      </scroll-view>
+    </view>
+  </view>
+</view>

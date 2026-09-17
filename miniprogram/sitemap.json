@@ -1,0 +1,4 @@
+{
+  "desc": "个人记录不参与搜索",
+  "rules": [{ "action": "disallow", "page": "*" }]
+}

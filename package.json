@@ -9,7 +9,12 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "playwright test",
     "check:pwa": "node scripts/verify-pwa.mjs",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "mini:assets": "node scripts/build-mini-assets.mjs",
+    "mini:test": "node --test scripts/tests/*.test.cjs",
+    "mini:check": "node scripts/check-miniprogram.mjs",
+    "mini:preview": "node scripts/preview-miniprogram.mjs",
+    "mini:smoke": "node scripts/smoke-wechat.mjs"
   },
   "dependencies": {
     "ical.js": "2.2.1",
@@ -17,6 +22,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
+    "miniprogram-automator": "^0.12.1",
     "typescript": "7.0.2",
     "vite": "8.3.0",
     "vite-plugin-pwa": "1.3.0"
