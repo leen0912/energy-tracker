@@ -14,7 +14,7 @@
       <view class="energy-reading">
         <text class="eyebrow">{{batteryLabel}}</text>
         <text class="energy-number {{numberSize}}">{{displayNumber}}</text>
-        <text class="estimate">{{value === null ? '从你的感受开始' : overdraft ? '透支 · 根据记录估算' : '根据记录估算'}}</text>
+        <text class="estimate">{{estimateText}}</text>
         <button class="feeling-link" bindtap="openCalibration">{{value === null ? '现在感受怎么样？' : '此刻的感受'}} <text>↗</text></button>
         <text wx:if="{{stale}}" class="last-time">最近记录 {{lastTime}}</text>
         <text wx:if="{{!stale}}" class="mood-copy">{{moodCopy}}</text>
@@ -120,6 +120,7 @@
           <button class="setting-button" bindtap="exportBackup">复制完整备份 <image src="/assets/chevron-right.png" /></button>
           <button class="setting-button" bindtap="restoreBackup">从备份恢复 <image src="/assets/chevron-right.png" /></button>
           <text class="fine-print">记录保存在这台设备上，不会自动同步。清理小程序数据或更换设备前，请先备份。</text>
+          <text class="fine-print">日迹 0.5.0 · 电量从最近一次感受出发，随时间缓慢下降。已记录的睡眠时段不扣；当天最多估算 12 小时，跨天暂停。补充接近满电时逐渐收敛。它不是身体测量，此刻的感受始终优先。</text>
           <text class="fine-print">相册仅在你保存花园时写入图片，不读取照片。剪贴板仅在你导出备份时写入，不读取内容。吃饭、饮品和感受均由你自愿记录，不读取健康数据。</text>
         </view>
         <view wx:else><text class="sheet-note">粘贴自己的完整备份，恢复会替换当前记录。</text><textarea id="field-restore" class="restore-input" value="{{restoreText}}" maxlength="2097152" fixed="{{true}}" adjust-position="{{false}}" bindfocus="inputFocus" bindkeyboardheightchange="keyboardChange" bindinput="restoreInput" placeholder="在这里手动粘贴备份内容" /><button class="primary" bindtap="confirmRestore">检查并恢复</button></view>

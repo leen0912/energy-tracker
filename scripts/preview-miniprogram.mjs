@@ -135,7 +135,7 @@ try {
   assert.equal(await read('sceneAsset'),'window-1-didi.jpg');
   await act('recordSelected');
   assert.equal(await page.evaluate(() => window.miniPage.state.events.length), 1);
-  assert.equal(await read('value'), 70);
+  assert.equal(await read('value'), 64);
   assert.equal((await read('homeGarden')).cat, true);
   await act('undoSaved');
   assert.equal(await read('value'), 60);
@@ -152,12 +152,12 @@ try {
   await act('setMeta', {field:'mealStatus',id:'eaten'});
   await act('setMeta', {field:'satisfaction',id:'happy'});
   await page.locator('.editor .primary').click();
-  assert.equal(await read('value'),80);
-  await page.evaluate(() => { window.miniPage.state.calibrations.forEach((c) => { c.at -= 9 * 3600000; }); window.miniPage.refresh(); });
+  assert.equal(await read('value'),68);
   await page.evaluate(() => window.miniPage.newEditor('work'));
   await page.locator('.editor input[data-field="minutesText"]').fill('480');
   await page.locator('.editor .primary').click();
-  assert.equal(await read('value'),60);
+  assert.equal(await read('value'),68);
+  assert.equal(await page.evaluate(() => window.miniPage.state.events.at(-1).minutes),480);
   await act('selectPreset',{id:'cat'}); await act('recordSelected');
   await act('clearMotion');
   await shot('home-v3');

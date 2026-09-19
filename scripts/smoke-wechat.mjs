@@ -19,8 +19,13 @@ try {
     p.onHide();
     p.originalCommitForSmoke = p.commit;
     p.commit = function(state) { this.state = state; this.refresh(); return true; };
-    p.state = { version: 2, originValue: null, originAt: null, seq: 1, calibrations: [{ id:'test-feeling',seq:1,at:Date.now()-60000,value:60 }], events:[],timer:null,settings:{reducedMotion:false} };
+    p.state = { version: 3, modelStart: null, originValue: null, originAt: null, seq: 1, calibrations: [{ id:'test-feeling',seq:1,at:Date.now()-7200000,value:60 }], events:[],timer:null,settings:{reducedMotion:false} };
     p.setData({ sheet:'',selectedPreset:'',lastAdded:'' }); p.refresh();
+  });
+  assert.equal(await page.data('value'),54);
+  assert.equal(await page.data('estimateText'),'随时间与记录估算');
+  await app.evaluate(() => {
+    const p = getCurrentPages()[0]; p.state.calibrations[0].at = Date.now()-60000; p.refresh();
   });
   await (await page.$('.preset[data-id="cat"]')).tap();
   assert.equal(await page.data('value'),60);
@@ -30,7 +35,7 @@ try {
   assert.equal(await page.data('incomingAsset'),'window-1-didi.jpg');
   await app.screenshot({path:fileURLToPath(new URL('wechat-growth-v4.png',out))});
   await page.waitFor(async () => !(await page.data('incomingAsset')));
-  assert.equal(await page.data('value'),70);
+  assert.equal(await page.data('value'),64);
   assert.equal((await page.data('homeGarden')).cat,true);
   const homeWidth = Number((await (await page.$('.home')).size()).width);
   const submitWidth = Number((await (await page.$('.primary')).size()).width);

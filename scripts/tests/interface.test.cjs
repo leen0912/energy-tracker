@@ -47,7 +47,7 @@ test('garden keeps old image until load, then completes growth after number anim
   assert.equal(page.data.sceneRevealing,true);
   advance(1100);
   assert.equal(page.data.sceneAsset,'window-0.jpg');
-  assert.equal(page.data.displayNumber,'70');
+  assert.equal(page.data.displayNumber,'64');
   advance(1000);
   assert.equal(page.data.incomingAsset,'');
   assert.equal(page.data.sceneAsset,'window-1-didi.jpg');
@@ -108,4 +108,16 @@ test('layout keeps dialog inside available area on small and large phones', () =
       assert.ok(l.sheetScrollHeight + 76 + l.sheetBottom <= l.sheetHeight);
     }
   }
+});
+
+test('foreground minute refresh updates elapsed energy without adding an event', () => {
+  const { page, advance } = setup();
+  page.onShow();
+  page.state.calibrations[0].at -= 2 * 3600000;
+  page.lastRefreshMinute = -1;
+  advance(1000);
+  assert.ok(page.data.value < 60);
+  assert.equal(page.data.value,energy.battery(page.state).value);
+  assert.equal(page.state.events.length,0);
+  page.onHide();
 });

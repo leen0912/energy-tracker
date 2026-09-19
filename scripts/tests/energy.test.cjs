@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const e = require("../../miniprogram/lib/energy.js");
+const model = require("../../miniprogram/lib/energy.js");
+// Preserve the old model as a regression suite for pre-upgrade histories.
+const e = { ...model, empty: () => { const {modelStart, ...s} = model.empty(); return {...s,version:2}; } };
 const t = new Date("2026-09-15T08:00:00").getTime();
 
 test("首次没有假定电量，以第一次感受为起点；零分母为空", () => {

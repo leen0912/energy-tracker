@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const e = require('../../miniprogram/lib/energy');
+const model = require('../../miniprogram/lib/energy');
+const e = { ...model, empty: () => { const {modelStart, ...s} = model.empty(); return {...s,version:2}; } };
 const garden = require('../../miniprogram/lib/garden');
 const t = Date.now() - 1000000;
 test('旧版本保留100基准、分数与顺序，空安装不保留默认100', () => {

@@ -4,7 +4,13 @@ let fault = false;
 function read() {
   try {
     const raw = wx.getStorageSync(KEY);
-    const state = raw ? energy.validate(raw) : energy.empty();
+    let state = raw ? energy.validate(raw) : energy.empty();
+    if (state.version < 3) {
+      const next = energy.upgrade(state);
+      if (!wx.getStorageSync(KEY + '.before-energy-v3')) wx.setStorageSync(KEY + '.before-energy-v3', raw);
+      wx.setStorageSync(KEY, next);
+      state = next;
+    }
     fault = false;
     return { state, error: null };
   } catch (e) {
@@ -25,7 +31,7 @@ function raw() {
   return JSON.stringify(wx.getStorageSync(KEY) || energy.empty());
 }
 function restore(text) {
-  const state = energy.validate(JSON.parse(text));
+  const state = energy.upgrade(energy.validate(JSON.parse(text)));
   const original = wx.getStorageSync(KEY);
   if (original) wx.setStorageSync(KEY + ".before-restore", original);
   wx.setStorageSync(KEY, state);

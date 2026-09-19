@@ -47,7 +47,8 @@ Page({
     this.timerInterval = setInterval(() => {
       if (!this.state) return;
       if (this.state.timer) this.setData({ timerText: duration(Date.now() - this.state.timer.start) });
-      if (this.todayKey !== energy.dayKey(Date.now()) || this.data.stale !== energy.battery(this.state).stale) this.refresh();
+      const minute = Math.floor(Date.now() / 60000);
+      if (minute !== this.lastRefreshMinute && !this.data.motion && !this.data.incomingAsset && !this.data.sheet) this.refresh(true);
     }, 1000);
   },
   onHide() { this.clearMotion(); clearInterval(this.timerInterval); },
@@ -94,8 +95,9 @@ Page({
     try { this.state = storage.save(next); this.refresh(); return true; }
     catch (e) { message(e.message || '没有保存成功，请检查存储空间'); return false; }
   },
-  refresh() {
+  refresh(skipPoster = false) {
     const now = Date.now(), today = energy.dayKey(now), result = energy.battery(this.state, now);
+    this.lastRefreshMinute = Math.floor(now / 60000);
     this.todayKey = today;
     const toRow = (e) => ({ ...e, time: energy.timeText(e.at), icon: energy.PRESETS.find((p) => p.id === e.preset).icon,
       duration: e.minutes === undefined ? '' : `${e.minutes} 分钟`, directionText: e.direction > 0 ? '补充' : e.direction < 0 ? '消耗' : '留下一笔' });
@@ -114,6 +116,7 @@ Page({
       value: result.value, displayNumber: result.value === null ? '—' : String(Math.abs(result.value)), numberSize: result.value !== null && Math.abs(result.value) >= 1000 ? 'compact-number' : result.value !== null && Math.abs(result.value) >= 100 ? 'medium-number' : '', overdraft: result.value !== null && result.value < 0,
       stale: result.stale, batteryLabel: result.initial ? '从此刻开始' : result.stale ? '上次估计' : result.value < 0 ? '有些透支' : '此刻余量',
       lastTime: result.lastAt ? `${energy.dayKey(result.lastAt)} ${energy.timeText(result.lastAt)}` : '',
+      estimateText: result.initial ? '从你的感受开始' : result.stale ? '时间估算已暂停' : result.value < 0 ? '透支 · 根据记录估算' : '随时间与记录估算',
       moodCopy: result.initial ? '现在的你，也可以是起点。' : result.stale ? '日子继续，按此刻的感受来。' : result.value < 30 ? '今天已经经历了不少。' : result.value < 65 ? '这一会儿，也算数。' : '有一点余裕，挺好。',
       recentText: events.length ? `${events[0].time} · ${events[0].label}` : '还没有记录，也不着急。',
       homeGarden, historyGarden: garden.forDay(this.state, this.data.selectedDate),
@@ -122,12 +125,13 @@ Page({
       monthLabel: `${first.getFullYear()}.${String(first.getMonth() + 1).padStart(2, '0')}`, cells,
       reducedMotion: this.state.settings.reducedMotion, timer: this.state.timer, timerText: this.state.timer ? duration(now - this.state.timer.start) : '00:00:00',
     });
-    if (this.data.view === 'share') this.makePoster();
+    if (this.data.view === 'share' && !skipPoster) this.makePoster();
   },
   switchView(e) {
     this.clearMotion();
     const view = ds(e).view;
     this.setSheet('', { view });
+    if (view === 'home') this.refresh();
     if (typeof wx.pageScrollTo === 'function') wx.pageScrollTo({ scrollTop: 0, duration: 0 });
     wx.setNavigationBarTitle({ title: view === 'home' ? '日迹' : view === 'history' ? '日迹 · 日历' : '日迹 · 回响' });
     if (view === 'share') this.makePoster();

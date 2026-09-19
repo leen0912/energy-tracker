@@ -22,7 +22,9 @@ const PRESETS = [
   { id: "tea", label: "喝了杯奶茶", short: "奶茶", direction: 0, icon: "cup" },
   { id: "supplement", label: "吃了补剂", short: "补剂", direction: 0, icon: "pill" },
 ];
-const empty = () => ({ version: 2, originValue: null, originAt: null, events: [], calibrations: [], timer: null, seq: 0, settings: { reducedMotion: false } });
+const DECAY_PER_HOUR = 3;
+const MAX_DECAY_HOURS = 12;
+const empty = () => ({ version: 3, modelStart: null, originValue: null, originAt: null, events: [], calibrations: [], timer: null, seq: 0, settings: { reducedMotion: false } });
 const dayKey = (t) => {
   const d = new Date(t);
   return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
@@ -74,7 +76,7 @@ function addEvent(state, input, now = Date.now()) {
   if (!label || label.length > 80 || !validTime(at, now) || ![-1, 0, 1].includes(direction) || (direction === 0 ? points !== 0 : !LEVELS.includes(points))) throw new Error("记录的名称、时间或影响程度不正确");
   if (input.minutes !== undefined && (!Number.isFinite(input.minutes) || input.minutes < 0 || input.minutes > 10080)) throw new Error("时长请填 0 到 10080 分钟");
   if (input.impact && !["light", "normal", "heavy"].includes(input.impact)) throw new Error("影响程度不正确");
-  const event = { id: id(), seq: state.seq + 1, at, preset: preset.id, label, direction, points, note: String(input.note || "").slice(0, 500), ruleVersion: 2, meta };
+  const event = { id: id(), seq: state.seq + 1, at, preset: preset.id, label, direction, points, note: String(input.note || "").slice(0, 500), ruleVersion: state.version >= 3 ? 3 : 2, meta };
   if (input.minutes !== undefined) event.minutes = input.minutes;
   if (input.impact) event.impact = input.impact;
   if (input.sourceId) event.sourceId = String(input.sourceId);
@@ -86,7 +88,7 @@ function calibrate(state, value, now = Date.now()) {
   const observation = { id: id(), seq: state.seq + 1, at: now, value };
   return { ...state, seq: observation.seq, calibrations: state.calibrations.concat(observation) };
 }
-function battery(state, now = Date.now()) {
+function legacyBattery(state, now = Date.now()) {
   const anchor = state.calibrations.filter((c) => c.at <= now).sort(ordered).pop();
   let value = anchor ? anchor.value : state.originValue === 100 ? 100 : null;
   const changes = [];
@@ -103,6 +105,89 @@ function battery(state, now = Date.now()) {
   const lastAt = Math.max(referenceAt || 0, ...state.events.filter((e) => e.at <= now).map((e) => e.at));
   return { value, anchor: anchor || null, initial: value === null, stale: value !== null && (!referenceAt || now - referenceAt > 86400000), lastAt: lastAt || null, changes };
 }
+function sleepIntervals(state, now) {
+  const intervals = state.events.filter((e) => e.preset === 'sleep' && e.minutes > 0 && e.at <= now)
+    .map((e) => [e.at - e.minutes * 60000, e.at]).sort((a,b) => a[0]-b[0]);
+  const merged = [];
+  for (const interval of intervals) {
+    const last = merged[merged.length - 1];
+    if (last && interval[0] <= last[1]) last[1] = Math.max(last[1], interval[1]);
+    else merged.push(interval.slice());
+  }
+  let total = 0;
+  merged.forEach((interval) => { interval[2] = total; total += interval[1]-interval[0]; });
+  return merged;
+}
+function sleepBefore(time, sleeps) {
+  let low = 0, high = sleeps.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (sleeps[mid][0] < time) low = mid + 1; else high = mid;
+  }
+  if (!low) return 0;
+  const [start,end,total] = sleeps[low-1];
+  return total + Math.min(time-start,end-start);
+}
+function awakeMs(start, end, sleeps) {
+  if (end <= start) return 0;
+  return Math.max(0, end - start - (sleepBefore(end,sleeps)-sleepBefore(start,sleeps)));
+}
+function battery(state, now = Date.now()) {
+  if (state.version < 3) return legacyBattery(state,now);
+  const anchors = state.calibrations.filter((c) => c.at <= now);
+  if (state.modelStart && state.modelStart.at <= now) anchors.push(state.modelStart);
+  const anchor = anchors.sort(ordered).pop();
+  if (!anchor) return { value:null, anchor:null, initial:true, stale:false, lastAt:null, changes:[], naturalDrain:0, sleepMinutes:0 };
+  const midnight = new Date(anchor.at); midnight.setHours(24,0,0,0);
+  const expiresAt = Math.min(midnight.getTime(), anchor.at + MAX_DECAY_HOURS * 3600000);
+  const end = Math.min(now,expiresAt), sleeps = sleepIntervals(state,now);
+  const decayBetween = (a,b) => awakeMs(Math.max(a,anchor.at),Math.min(b,end),sleeps) / 3600000 * DECAY_PER_HOUR;
+  let value = anchor.value, cursor = anchor.at, naturalDrain = 0;
+  const changes = [], decaySegments = [];
+  const paidBefore = (time) => {
+    let low = 0, high = decaySegments.length;
+    while (low < high) {
+      const mid = (low+high) >>> 1;
+      if (decaySegments[mid].start < time) low = mid+1; else high = mid;
+    }
+    if (!low) return 0;
+    const segment = decaySegments[low-1];
+    return segment.before + Math.min(segment.paid,decayBetween(segment.start,Math.min(time,segment.end)));
+  };
+  const decayTo = (at) => {
+    const amount = decayBetween(cursor,at);
+    // Passive time never creates debt; explicitly recorded strain still can.
+    const applied = Math.min(Math.max(0,value),amount);
+    if (at > cursor) decaySegments.push({start:cursor,end:at,paid:applied,before:naturalDrain});
+    value -= applied; naturalDrain += applied; cursor = at;
+  };
+  const events = state.events.filter((e) => e.at <= now && ordered(e,anchor) > 0).sort(ordered);
+  for (const event of events) {
+    decayTo(event.at);
+    const start = event.minutes > 0 ? event.at - event.minutes * 60000 : event.at;
+    const fraction = event.minutes > 0 ? Math.min(1,Math.max(0,(event.at-anchor.at)/(event.minutes*60000))) : 1;
+    let applied = event.points * fraction;
+    // A timed default estimate already includes ordinary time expenditure.
+    // Explicit impact expresses extra strain and is not discounted a second time.
+    if (event.direction < 0 && event.minutes > 0 && !event.impact) applied = Math.max(0,applied-(paidBefore(event.at)-paidBefore(start)));
+    if (event.direction > 0) {
+      applied *= (100 - Math.max(0,Math.min(100,value))) / 100;
+      applied = Math.max(0,Math.min(applied,99-value));
+      value += applied;
+    } else if (event.direction < 0) value -= applied;
+    else applied = 0;
+    changes.push({id:event.id,value:Math.round(value),applied});
+  }
+  decayTo(now);
+  return { value:Math.round(value), anchor, initial:false, stale:now >= expiresAt, expiresAt,
+    lastAt:events.length ? events[events.length-1].at : anchor.at, changes, naturalDrain,
+    sleepMinutes: Math.max(0,end-anchor.at-awakeMs(anchor.at,end,sleeps))/60000 };
+}
+function upgrade(state, now = Date.now()) {
+  if (state.version === 3) return state;
+  const previous = legacyBattery(state,now);
+  return { ...state, version:3, modelStart:previous.value === null ? null : { at:now, seq:state.seq, value:previous.value } };
+}
 function daily(state, date = dayKey(Date.now())) {
   const events = state.events.filter((e) => dayKey(e.at) === date).sort(ordered);
   const charge = events.filter((e) => e.direction > 0).reduce((n, e) => n + e.points, 0);
@@ -115,7 +200,7 @@ function editEvent(state, eventId, patch, now = Date.now()) {
   const old = state.events.find((e) => e.id === eventId);
   if (!old) throw new Error("记录已不存在");
   const clean = addEvent({ ...empty(), seq: old.seq - 1 }, { ...old, ...patch, sourceId: undefined }, now).events[0];
-  return { ...state, events: state.events.map((e) => e.id === eventId ? { ...clean, id: old.id, seq: old.seq, ...(old.sourceId ? { sourceId: old.sourceId } : {}) } : e) };
+  return { ...state, events: state.events.map((e) => e.id === eventId ? { ...clean, ruleVersion:old.ruleVersion, id: old.id, seq: old.seq, ...(old.sourceId ? { sourceId: old.sourceId } : {}) } : e) };
 }
 function startTimer(state, now = Date.now()) { return state.timer ? state : { ...state, timer: { id: id(), start: now } }; }
 function finishTimer(state, input, now = Date.now()) {
@@ -124,14 +209,14 @@ function finishTimer(state, input, now = Date.now()) {
   return { ...next, timer: null };
 }
 function validate(value, now = Date.now()) {
-  if (!value || ![1, 2].includes(value.version) || !Array.isArray(value.events) || !Array.isArray(value.calibrations) || value.events.length > 10000 || value.calibrations.length > 10000 || !Number.isSafeInteger(value.seq) || value.seq < 0) throw new Error("不是有效的电量备份");
+  if (!value || ![1, 2, 3].includes(value.version) || !Array.isArray(value.events) || !Array.isArray(value.calibrations) || value.events.length > 10000 || value.calibrations.length > 10000 || !Number.isSafeInteger(value.seq) || value.seq < 0) throw new Error("不是有效的电量备份");
   const ids = new Set(), sequences = new Set(), sources = new Set();
   for (const item of value.events.concat(value.calibrations)) {
     if (!item || typeof item.id !== "string" || !item.id || item.id.length > 200 || ids.has(item.id) || !Number.isSafeInteger(item.seq) || item.seq < 1 || item.seq > value.seq || sequences.has(item.seq) || !validTime(item.at, now)) throw new Error("备份中的记录格式不正确");
     ids.add(item.id); sequences.add(item.seq);
   }
   const events = value.events.map((e) => {
-    if (typeof e.label !== "string" || typeof e.note !== "string" || e.note.length > 500 || ![1, 2].includes(e.ruleVersion) || (e.direction === 0 ? e.points !== 0 : !LEVELS.includes(e.points)) || (value.version === 1 && ![-1, 1].includes(e.direction))) throw new Error("备份中的能量事件不正确");
+    if (typeof e.label !== "string" || typeof e.note !== "string" || e.note.length > 500 || ![1, 2, 3].includes(e.ruleVersion) || (e.direction === 0 ? e.points !== 0 : !LEVELS.includes(e.points)) || (value.version < 3 && e.ruleVersion > 2) || (value.version === 1 && ![-1, 1].includes(e.direction))) throw new Error("备份中的能量事件不正确");
     if (e.sourceId !== undefined && (typeof e.sourceId !== "string" || !e.sourceId || e.sourceId.length > 200 || sources.has(e.sourceId))) throw new Error("备份中的计时记录重复或不正确");
     if (e.sourceId) sources.add(e.sourceId);
     const clean = addEvent({ ...empty(), seq: e.seq - 1 }, e, now).events[0];
@@ -153,6 +238,12 @@ function validate(value, now = Date.now()) {
   const originAt = value.version === 1 ? legacy ? Math.min(...events.map((e) => e.at)) : null : value.originAt;
   if (![null, 100].includes(originValue) || (originValue === 100 ? !validTime(originAt, now) : originAt !== null)) throw new Error("备份中的初始状态不正确");
   if (value.settings && typeof value.settings.reducedMotion !== "boolean") throw new Error("动效设置不正确");
-  return { version: 2, originValue, originAt, seq: value.seq, events, calibrations, timer, settings: { reducedMotion: !!(value.settings && value.settings.reducedMotion) } };
+  const state = { version: value.version === 3 ? 3 : 2, originValue, originAt, seq: value.seq, events, calibrations, timer, settings: { reducedMotion: !!(value.settings && value.settings.reducedMotion) } };
+  if (value.version === 3) {
+    const m = value.modelStart;
+    if (m !== null && (!m || !validTime(m.at,now) || !Number.isSafeInteger(m.seq) || m.seq < 0 || m.seq > value.seq || !Number.isInteger(m.value) || m.value > 100 || Math.abs(m.value) > 200000)) throw new Error('旧版电量起点不正确');
+    state.modelStart = m === null ? null : {at:m.at,seq:m.seq,value:m.value};
+  }
+  return state;
 }
-module.exports = { INITIAL_ENERGY, LEVELS, FEELINGS, PRESETS, empty, dayKey, timeText, addEvent, calibrate, battery, daily, removeEvent, editEvent, startTimer, finishTimer, validate, pointsFor };
+module.exports = { INITIAL_ENERGY, LEVELS, FEELINGS, PRESETS, DECAY_PER_HOUR, MAX_DECAY_HOURS, empty, dayKey, timeText, addEvent, calibrate, battery, daily, removeEvent, editEvent, startTimer, finishTimer, validate, upgrade, pointsFor };
