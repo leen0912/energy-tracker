@@ -56,7 +56,7 @@ try {
       for (const [key, value] of Object.entries(patch)) { const keys = key.split('.'); let obj = this.data; for (const k of keys.slice(0,-1)) { obj[k] ??= {}; obj = obj[k]; } obj[keys.at(-1)] = value; }
       if (!queued) { queued = true; queueMicrotask(() => { queued = false; render(); }); }
     } };
-    window.miniPage = instance; window.energy = modules.energy; window.mockStatus = status;
+    window.miniPage = instance; window.energy = modules.energy; window.garden = modules.garden; window.mockStatus = status;
     const style = document.createElement('style'); document.head.append(style);
     const rpx = (s) => s.replace(/([\d.]+)rpx/g, (_, n) => `${Number(n)*innerWidth/750}px`);
     const toDom = (node) => {
@@ -121,18 +121,19 @@ try {
   await page.locator('.feeling-options [data-id="okay"]').click();
   assert.equal(await read('value'), 60);
   await shot('home-empty-v3');
+  const template = (await read('homeGarden')).template;
   await page.locator('.preset[data-id="cat"]').click();
   assert.equal(await page.evaluate(() => window.miniPage.state.events.length), 0);
   await page.locator('.record-submit').click();
-  assert.equal(await read('sceneAsset'),'window-0.jpg');
-  assert.equal(await read('incomingAsset'),'window-1-didi.jpg');
+  assert.equal(await read('sceneAsset'),`${template}-0.jpg`);
+  assert.equal(await read('incomingAsset'),`${template}-1-didi.jpg`);
   await page.waitForFunction(() => window.miniPage.data.sceneRevealing);
   await page.waitForTimeout(450);
   const growthOpacity = await page.locator('.scene-reveal').evaluate((el) => Number(getComputedStyle(el).opacity));
   assert.ok(growthOpacity > 0 && growthOpacity < 1,`Growth has visible intermediate frames: ${growthOpacity}, ${await page.locator('.scene-reveal').evaluate((el) => getComputedStyle(el).transition)}`);
   await shot('garden-growing-v4');
   await page.waitForFunction(() => !window.miniPage.data.incomingAsset);
-  assert.equal(await read('sceneAsset'),'window-1-didi.jpg');
+  assert.equal(await read('sceneAsset'),`${template}-1-didi.jpg`);
   await act('recordSelected');
   assert.equal(await page.evaluate(() => window.miniPage.state.events.length), 1);
   assert.equal(await read('value'), 64);
@@ -253,7 +254,30 @@ try {
     }
   }
   assert.equal(await page.evaluate(() => [...document.images].filter((i) => !i.complete || i.naturalWidth === 0).length),0);
+  // Exercise every new bitmap at both phone sizes, including the full grown scene.
+  for (const width of [393,440]) {
+    await page.setViewportSize({width,height:width === 393 ? 852 : 956});
+    await page.evaluate(() => { window.miniPage.syncViewport(); window.miniPage.setData({view:'home',sheet:''}); });
+    for (const name of ['peony','iris','tulip']) {
+      for (const stage of [0,1,2,3]) for (const cat of [false,true]) {
+        await page.evaluate(({name,stage,cat}) => window.miniPage.setData({sceneAsset:`${name}-${stage}${cat ? '-didi' : ''}.jpg`,incomingAsset:'',displayNumber:'62',value:62,feedback:'',moodCopy:'这一会儿，挺好。'}),{name,stage,cat});
+        await page.waitForFunction(() => [...document.images].every((i) => i.complete && i.naturalWidth > 0));
+        assert.ok(await page.locator('.home-scene').evaluate((img) => img.naturalWidth === 600));
+        if (stage === 3 && cat) await shot(`garden-${name}-${width}-v12`);
+      }
+    }
+  }
   await page.evaluate(() => { window.miniPage.onShow(); window.miniPage.onHide(); window.miniPage.onUnload(); });
+  const gallery = await browser.newPage({viewport:{width:1056,height:780},deviceScaleFactor:1.5});
+  const examples = [];
+  for (const [name,label] of [['peony','珊瑚牡丹'],['iris','蓝鸢尾'],['tulip','郁金香与虞美人']]) {
+    const bytes = await readFile(path.join(out,`garden-${name}-393-v12.png`));
+    examples.push(`<section><h2>${label}</h2><img src="data:image/png;base64,${bytes.toString('base64')}" /></section>`);
+  }
+  await gallery.setContent(`<html lang="zh-CN"><meta charset="utf-8"><style>body{margin:0;padding:24px;background:#eff2f1;color:#202526;font-family:'Microsoft YaHei',sans-serif}main{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}h2{margin:0 0 14px;font-size:20px;font-weight:400}img{display:block;width:100%;height:auto}p{font-size:12px;color:#63706e}</style><main>${examples.join('')}</main><p>日迹 0.6 · 新增花园的页面预览，使用示例状态；并非真实生活记录。</p></html>`);
+  await gallery.evaluate(() => Promise.all([...document.images].map((img) => img.decode())));
+  await gallery.screenshot({path:path.join(out,'garden-templates-v12.png'),fullPage:true});
+  await gallery.close();
   assert.deepEqual(errors,[]);
   console.log('PASS compiled-WXML browser harness: recording, growth intermediate frames, typed title, repeat keyboard/dialog/navigation cycles, poster/privacy/failures, and 320/375/393/430/440/768 widths. Mocked wx APIs; real-device checks still required.');
 } finally { await browser.close(); }

@@ -2,6 +2,22 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const energy = require('../../miniprogram/lib/energy');
 const poster = require('../../miniprogram/lib/poster');
+const garden = require('../../miniprogram/lib/garden');
+
+test('every template uses the same dated scene in portrait and square exports', () => {
+  const images = [];
+  global.wx = { createCanvasContext: () => ({ setFontSize() {}, setFillStyle() {}, fillRect() {}, fillText() {}, drawImage: (src) => images.push(src), draw: (_, done) => done() }), canvasToTempFilePath: (o) => o.success({tempFilePath:'poster.png'}) };
+  try {
+    for (const date of ['2026-09-19','2026-09-20','2026-09-21','2026-09-22']) {
+      const state = energy.empty(), at = new Date(`${date}T12:00:00`).getTime();
+      state.events = [0,1,2,3].map((i) => ({id:`event-${i}`,seq:i,at,preset:i ? 'work' : 'cat',label:'测试记录',direction:0,points:0}));
+      for (const format of ['portrait','square']) {
+        poster.draw({},state,date,true,(err) => assert.ifError(err),0,format);
+        assert.equal(images.at(-1),`/assets/${garden.templateForDate(date)}-3-didi.jpg`);
+      }
+    }
+  } finally { delete global.wx; }
+});
 test('长记录逐字保留、横竖分别分页、隐私开关不泄露名称和备注', () => {
   let state = energy.empty(); const date = energy.dayKey(Date.now());
   for (let i = 0; i < 18; i++) state = energy.addEvent(state, { preset: 'cat', label: `${i}片刻${'长记录'.repeat(20)}`, note: '绝不公开的心情备注' });

@@ -29,10 +29,11 @@ try {
   });
   await (await page.$('.preset[data-id="cat"]')).tap();
   assert.equal(await page.data('value'),60);
+  const template = (await page.data('homeGarden')).template;
   await (await page.$('.record-submit')).tap();
   await page.waitFor(async () => await page.data('sceneRevealing'));
-  assert.equal(await page.data('sceneAsset'),'window-0.jpg');
-  assert.equal(await page.data('incomingAsset'),'window-1-didi.jpg');
+  assert.equal(await page.data('sceneAsset'),`${template}-0.jpg`);
+  assert.equal(await page.data('incomingAsset'),`${template}-1-didi.jpg`);
   await app.screenshot({path:fileURLToPath(new URL('wechat-growth-v4.png',out))});
   await page.waitFor(async () => !(await page.data('incomingAsset')));
   assert.equal(await page.data('value'),64);

@@ -3,6 +3,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const energy = require('../../miniprogram/lib/energy');
+const garden = require('../../miniprogram/lib/garden');
+const asset = (stage, cat = false) => `${garden.templateForDate(energy.dayKey(Date.now()))}-${stage}${cat ? '-didi' : ''}.jpg`;
 const { layout } = require('../../miniprogram/lib/layout');
 
 function setup() {
@@ -41,23 +43,23 @@ function setup() {
 test('garden keeps old image until load, then completes growth after number animation', () => {
   const { page, advance } = setup();
   page.saveNew({preset:'cat'});
-  assert.equal(page.data.sceneAsset,'window-0.jpg');
-  assert.equal(page.data.incomingAsset,'window-1-didi.jpg');
+  assert.equal(page.data.sceneAsset,asset(0));
+  assert.equal(page.data.incomingAsset,asset(1,true));
   page.sceneLoaded(); advance(100);
   assert.equal(page.data.sceneRevealing,true);
   advance(1100);
-  assert.equal(page.data.sceneAsset,'window-0.jpg');
+  assert.equal(page.data.sceneAsset,asset(0));
   assert.equal(page.data.displayNumber,'64');
   advance(1000);
   assert.equal(page.data.incomingAsset,'');
-  assert.equal(page.data.sceneAsset,'window-1-didi.jpg');
+  assert.equal(page.data.sceneAsset,asset(1,true));
 });
 
 test('rapid records and leaving page cannot replay a stale garden', () => {
   const { page, advance } = setup();
   page.saveNew({preset:'cat'}); page.sceneLoaded(); advance(300);
   page.saveNew({preset:'work'}); page.sceneLoaded(); advance(2300);
-  assert.equal(page.data.sceneAsset,'window-2-didi.jpg');
+  assert.equal(page.data.sceneAsset,asset(2,true));
   page.saveNew({preset:'meal'}); page.onHide(); advance(6000);
   assert.equal(page.data.incomingAsset,'');
   assert.equal(page.data.sceneAsset,page.data.homeGarden.asset);
@@ -72,11 +74,11 @@ test('same-stage records respond, while reduced motion and save failures do not'
   page.state.settings.reducedMotion = true; page.refresh();
   page.saveNew({preset:'cat'});
   assert.equal(page.data.incomingAsset,'');
-  assert.equal(page.data.sceneAsset,'window-3-didi.jpg');
+  assert.equal(page.data.sceneAsset,asset(3,true));
   page.state.settings.reducedMotion = false; page.refresh();
-  const asset = page.data.sceneAsset;
+  const savedAsset = page.data.sceneAsset;
   page.commit = () => false; page.saveNew({preset:'work'}); advance(5000);
-  assert.equal(page.data.sceneAsset,asset); assert.equal(page.data.motion,'');
+  assert.equal(page.data.sceneAsset,savedAsset); assert.equal(page.data.motion,'');
 });
 
 test('keyboard open/close never shrinks next editor or scene across repeated cycles', () => {

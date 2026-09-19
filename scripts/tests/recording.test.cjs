@@ -49,7 +49,7 @@ test('删除、编辑和大量中性/消耗记录生成确定的场景，不叠�
   let s = e.empty();
   for (let i = 0; i < 80; i++) s = e.addEvent(s, { preset: 'work' }, t + i);
   assert.equal(garden.forDay(s, e.dayKey(t)).stage, 3);
-  assert.equal(garden.forDay(s, e.dayKey(t)).asset, 'window-3.jpg');
+  assert.equal(garden.forDay(s, e.dayKey(t)).asset, `${garden.templateForDate(e.dayKey(t))}-3.jpg`);
   s = e.addEvent(s, { preset: 'cat' }, t + 100);
   assert.equal(garden.forDay(s, e.dayKey(t)).cat, true);
   s = e.removeEvent(s, s.events.at(-1).id);
